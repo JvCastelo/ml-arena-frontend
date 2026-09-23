@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Nova run · ML Arena{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Nova run</h1>
+<form method="post" class="bg-white p-4 rounded shadow-sm" style="max-width: 640px;">
+  <div class="mb-3">
+    <label class="form-label">Nome</label>
+    <input class="form-control" type="text" name="name" required value="{{ form.get('name', '') }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Algoritmo</label>
+    <input class="form-control" type="text" name="algorithm" required
+           value="{{ form.get('algorithm', '') }}" placeholder="ex: XGBoost">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Hiperparâmetros (JSON)</label>
+    <textarea class="form-control" name="hyperparams" rows="4"
+              placeholder='{"max_depth": 6, "n_estimators": 300}'>{{ form.get('hyperparams', '') }}</textarea>
+  </div>
+  <div class="row">
+    <div class="col-6 mb-3">
+      <label class="form-label">RMSE treino</label>
+      <input class="form-control" type="number" step="0.01" name="train_rmse" required>
+    </div>
+    <div class="col-6 mb-3">
+      <label class="form-label">MAE treino</label>
+      <input class="form-control" type="number" step="0.01" name="train_mae" required>
+    </div>
+    <div class="col-6 mb-3">
+      <label class="form-label">RMSE teste</label>
+      <input class="form-control" type="number" step="0.01" name="test_rmse" required>
+    </div>
+    <div class="col-6 mb-3">
+      <label class="form-label">MAE teste</label>
+      <input class="form-control" type="number" step="0.01" name="test_mae" required>
+    </div>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">CSV medido × previsto</label>
+    <input class="form-control" type="file" disabled>
+    <div class="form-text">
+      Upload desabilitado no protótipo — depende do contrato de
+      <code>POST /runs/{id}/actual-predicted</code> e do worker (SNS/SQS), que ainda não existem.
+    </div>
+  </div>
+  <button class="btn btn-primary" type="submit">Criar run (mock)</button>
+  <a class="btn btn-link" href="{{ url_for('runs.list_runs') }}">Cancelar</a>
+</form>
+{% endblock %}

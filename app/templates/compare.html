@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Comparar · ML Arena{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Model Battle</h1>
+
+<div class="row g-4">
+  {% for slot in ["a", "b"] %}
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <select class="form-select form-select-sm w-auto" id="select-{{ slot }}" data-slot="{{ slot }}">
+          <option value="">Escolher run…</option>
+          {% for run in runs %}
+          <option value="{{ run.id }}">{{ run.name }} ({{ run.algorithm }})</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-reset="{{ slot }}" title="Resetar slot">
+          &#x21bb;
+        </button>
+      </div>
+      <div class="card-body" id="panel-{{ slot }}">
+        <p class="text-muted mb-0">Escolha um run acima.</p>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="text-center my-4">
+  <div class="btn-group" role="group" aria-label="tipo de gráfico">
+    <button class="btn btn-outline-primary active" type="button" data-plot-kind="measured_predicted">Predict plot</button>
+    <button class="btn btn-outline-primary" type="button" data-plot-kind="residuals">Resíduos</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>Comparação</span>
+    <button class="btn btn-success btn-sm" id="submit-compare">SUBMIT</button>
+  </div>
+  <div class="card-body" id="comparison-table">
+    <p class="text-muted mb-0">Escolha os dois runs e clique em SUBMIT.</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/compare.js') }}"></script>
+{% endblock %}

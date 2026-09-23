@@ -1,0 +1,16 @@
+[project]
+name = "ml-arena-frontend"
+version = "0.1.0"
+description = "Frontend (protótipo) do ML Arena"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.1.3",
+    "requests>=2.32",
+    "python-dotenv>=1.2.3",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.8",
+]
