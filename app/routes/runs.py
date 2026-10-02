@@ -1,49 +1,93 @@
 import json
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import RedirectResponse
 
-from ..services import mock_data
+from app.auth_guard import require_token
+from app.services import api_client
+from app.services.api_client import ApiError
+from app.services.flash import flash
+from app.templates_engine import render
 
-runs_bp = Blueprint("runs", __name__, url_prefix="/runs")
+router = APIRouter(prefix="/runs")
 
 
-@runs_bp.get("")
-def list_runs():
-    return render_template("runs/list.html", runs=mock_data.list_runs())
+@router.get("", name="runs_list")
+async def list_runs(request: Request):
+    token = require_token(request)
+    data = await api_client.list_runs(token, limit=100)
+    return render(request, "runs/list.html", {"runs": data["items"]})
 
 
-@runs_bp.route("/new", methods=["GET", "POST"])
-def new_run():
-    if request.method == "POST":
-        name = request.form["name"].strip()
-        algorithm = request.form["algorithm"].strip()
-        try:
-            hyperparams = json.loads(request.form.get("hyperparams") or "{}")
-        except json.JSONDecodeError:
-            flash("Hiperparâmetros precisam ser um JSON válido.", "danger")
-            return render_template("runs/form.html", form=request.form), 400
+@router.get("/new", name="new_run_form")
+async def new_run_form(request: Request):
+    require_token(request)
+    return render(request, "runs/form.html", {"form": {}})
 
-        metrics = {
-            "train": {
-                "rmse": float(request.form["train_rmse"]),
-                "mae": float(request.form["train_mae"]),
+
+@router.post("/new", name="new_run_submit")
+async def new_run_submit(
+    request: Request,
+    name: str = Form(...),
+    algorithm: str = Form(...),
+    hyperparams: str = Form(""),
+    train_rmse: float = Form(...),
+    train_mae: float = Form(...),
+    test_rmse: float = Form(...),
+    test_mae: float = Form(...),
+):
+    token = require_token(request)
+
+    try:
+        hp = json.loads(hyperparams or "{}")
+    except json.JSONDecodeError:
+        flash(request, "Hiperparâmetros precisam ser um JSON válido.", "danger")
+        return render(
+            request,
+            "runs/form.html",
+            {
+                "form": {
+                    "name": name,
+                    "algorithm": algorithm,
+                    "hyperparams": hyperparams,
+                }
             },
-            "test": {
-                "rmse": float(request.form["test_rmse"]),
-                "mae": float(request.form["test_mae"]),
+            status_code=400,
+        )
+
+    payload = {
+        "name": name,
+        "algorithm": algorithm,
+        "hyperparams": hp,
+        "metrics": {
+            "train": {"rmse": train_rmse, "mae": train_mae},
+            "test": {"rmse": test_rmse, "mae": test_mae},
+        },
+    }
+    try:
+        await api_client.create_run(token, payload)
+    except ApiError as exc:
+        flash(request, exc.detail, "danger")
+        return render(
+            request,
+            "runs/form.html",
+            {
+                "form": {
+                    "name": name,
+                    "algorithm": algorithm,
+                    "hyperparams": hyperparams,
+                }
             },
-        }
-        mock_data.create_run(name, algorithm, hyperparams, metrics)
-        flash(f'Run "{name}" criado (mock, só em memória — reseta ao reiniciar o servidor).', "success")
-        return redirect(url_for("runs.list_runs"))
+            status_code=400,
+        )
 
-    return render_template("runs/form.html", form={})
+    flash(request, f'Run "{name}" criado.', "success")
+    return RedirectResponse(url=request.url_for("runs_list"), status_code=303)
 
 
-@runs_bp.post("/<int:run_id>/delete")
-def delete_run(run_id):
-    run = mock_data.get_run(run_id)
-    mock_data.delete_run(run_id)
-    if run:
-        flash(f'Run "{run["name"]}" removido (mock).', "info")
-    return redirect(url_for("runs.list_runs"))
+@router.post("/{run_id}/delete", name="delete_run")
+async def delete_run(request: Request, run_id: int):
+    token = require_token(request)
+    await api_client.delete_run(token, run_id)
+    flash(request, "Run removido.", "info")
+    return RedirectResponse(url=request.url_for("runs_list"), status_code=303)

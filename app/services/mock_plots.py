@@ -23,7 +23,9 @@ def _generate_points(seed, quality, n=40):
     points = []
     for _ in range(n):
         measured = rng.uniform(0, 100)
-        predicted = measured + rng.gauss(0, noise_scale) + (1 - quality) * rng.uniform(-10, 10)
+        predicted = (
+            measured + rng.gauss(0, noise_scale) + (1 - quality) * rng.uniform(-10, 10)
+        )
         points.append((measured, predicted))
     return points
 
