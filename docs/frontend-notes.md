@@ -2,10 +2,30 @@
 
 > Documento de trabalho, no mesmo espírito de `docs/api-contract.md` e `docs/db-diagram.md` no
 > repo do backend. Começou como rascunho (seções abaixo marcadas **[histórico]** refletem a
-> primeira versão, com Flask) e foi atualizado depois que o backend trocou pra FastAPI e ganhou
-> auth real — ver "Decisões agora fechadas" logo abaixo.
+> primeira versão, com Flask) e foi atualizado em duas rodadas: quando o backend trocou pra
+> FastAPI e ganhou auth real ("Decisões agora fechadas"), e quando o backend terminou S3/worker/
+> `GET /runs/compare` de verdade ("Integração final" logo abaixo). O passo a passo técnico dessa
+> última rodada está no `CLAUDE.md` deste repo (lido pelo Claude automaticamente).
 
-## Decisões agora fechadas (atualização pós-migração pra FastAPI)
+## Integração final (comparação e upload de CSV reais)
+
+- **`GET /api/v1/runs/compare?run_a=&run_b=`** substituiu as duas chamadas a `GET /runs/{id}` em
+  `app/routes/compare.py` — uma chamada só, já traz `plots.measured_predicted`/`plots.residuals`
+  como URL pré-assinada do S3, ou `null` se o worker ainda não terminou. `app/services/
+  mock_plots.py` e a rota `/compare/plot/{run_id}/{kind}` foram apagados — não eram mais
+  necessários.
+- **`compare.js`** trata `plotUrl === null` mostrando um aviso ("gráfico ainda sendo gerado") em
+  vez de uma `<img>` quebrada.
+- **Upload de CSV real**: `POST /api/v1/runs/{id}/measured-predicted` (`multipart/form-data`,
+  campo `file`). O form de criação de run (`runs/form.html`) ganhou o campo de arquivo de volta
+  (removido o `disabled`). O run é criado primeiro; se o upload falhar depois, o run **não é
+  desfeito** — só mostra a mensagem de erro (decisão explícita, pra não complicar o fluxo no
+  tempo que restava).
+- Testado de ponta a ponta contra o backend local com worker real: criar run com CSV → worker
+  processa em segundos → `GET /runs/compare` devolve URL de PNG real do S3 (confirmado baixando a
+  imagem e checando `Content-Type: image/png`).
+
+## [histórico] Decisões da rodada anterior (migração pra FastAPI)
 
 - **Stack trocada de Flask pra FastAPI** — o próprio `CLAUDE.md` do backend já listava como
   pendência "Frontend (obrigatório): Jinja2 via FastAPI + JS puro na comparação + Bootstrap", ou
@@ -24,13 +44,9 @@
   `password`), `GET /api/v1/users/me`, `POST/GET/PATCH/DELETE /api/v1/runs`. Testado de ponta a
   ponta (registro → login → criar run → listar → comparar → deletar) contra o backend rodando em
   Docker localmente.
-- **Tela de comparação é híbrida por enquanto**: hiperparâmetros e métricas vêm de dois `GET
-  /api/v1/runs/{id}` reais; os plots continuam sendo SVG gerado localmente
-  (`app/services/mock_plots.py`), com um badge "plot ilustrativo" na UI, porque o backend ainda
-  não tem `GET /runs/compare`, upload de CSV, S3 nem worker. Quando essas rotas existirem, trocar
-  `app/routes/compare.py` pra consumi-las direto (idealmente um único `GET /runs/compare?a=&b=`
-  em vez de duas chamadas a `/runs/{id}`).
-- **Upload de CSV continua desabilitado** no form de criar run — mesma razão.
+- **[resolvido na "Integração final" acima]** Na época, a tela de comparação era híbrida
+  (hiperparâmetros/métricas reais, plots mock) e o upload de CSV ficava desabilitado, porque o
+  backend ainda não tinha `GET /runs/compare`, S3 nem worker.
 
 ## Contexto do backend que importa pra cá
 
@@ -78,12 +94,11 @@ ml-arena-frontend/
 │   ├── templates_engine.py   # Jinja2Templates + injeção de flash/user_name
 │   ├── routes/
 │   │   ├── auth.py           # /login, /register, /logout
-│   │   ├── runs.py           # lista, criação, remoção
-│   │   └── compare.py        # tela de batalha + /compare/data + /compare/plot (mock)
+│   │   ├── runs.py           # lista, criação (+ upload opcional de CSV), remoção
+│   │   └── compare.py        # tela de batalha + /compare/data (proxy de GET /runs/compare)
 │   ├── services/
 │   │   ├── api_client.py     # httpx.AsyncClient, chamadas ao backend com o Bearer token
-│   │   ├── flash.py          # flash()/get_flashed_messages() via sessão (Starlette não tem)
-│   │   └── mock_plots.py     # SVG placeholder pros plots, até o backend gerar de verdade
+│   │   └── flash.py          # flash()/get_flashed_messages() via sessão (Starlette não tem)
 │   ├── templates/
 │   │   ├── base.html, auth/, runs/, compare.html
 │   └── static/js/compare.js  # o único JS do projeto
@@ -100,7 +115,7 @@ ml-arena-frontend/
 
 ## Repo separado do backend — pontos a decidir quando for hora
 
-- Se o frontend for uma app Flask separada rodando em outra porta/instância, **quem fica atrás do
+- Se o frontend for uma app separada rodando em outra porta/instância, **quem fica atrás do
   ALB/ASG da Parte 2**: só o frontend, só o backend, ou os dois (dois ALBs/ASGs)? Isso muda a
   arquitetura de deploy e o vídeo de demonstração da elasticidade.
 - Se os dois escalam independentemente, cada instância do frontend precisa da mesma `SECRET_KEY`
@@ -109,8 +124,10 @@ ml-arena-frontend/
 
 ## Estado atual
 
-As três telas do spec (lista de runs, criação de run, comparação) estão conectadas de verdade ao
-backend — auth, criação/listagem/remoção de runs. Testado de ponta a ponta contra o backend
-rodando em Docker (`docker compose up -d` no `ml-arena-backend`). O que falta pro resto virar real
-está listado em "Decisões agora fechadas" (plots, upload de CSV) — isso é trabalho do backend
-(`GET /runs/compare`, S3, worker), não do frontend.
+As três telas do spec (lista de runs, criação de run com upload de CSV, comparação com plots
+reais) estão conectadas de ponta a ponta com o backend real — nada mock sobrando. O que ficou de
+fora desta rodada, por decisão explícita (não é bloqueio pro prazo):
+
+- Tela própria de "detalhe do run" com progresso do processamento — hoje só dá pra ver o status
+  na listagem e recarregar a página.
+- Onde o frontend roda na AWS (ver "Repo separado" abaixo) — ainda não decidido.

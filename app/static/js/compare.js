@@ -1,7 +1,8 @@
 // JS puro da tela de comparação. `/compare/data` é uma rota do próprio
 // frontend que faz proxy pro backend (usando o JWT da sessão, nunca exposto
-// aqui) — hiperparams/métricas são reais; os plots ainda são ilustrativos
-// porque o backend não gera gráficos de verdade ainda (ver run.plots_are_placeholder).
+// aqui). `run.plots[kind]` vem `null` quando o worker ainda não terminou de
+// gerar aquele plot (run processing/failed) — tratado abaixo em vez de
+// quebrar a <img>.
 (function () {
   const state = { a: null, b: null, plotKind: "measured_predicted" };
 
@@ -24,15 +25,14 @@
           `<li class="list-group-item d-flex justify-content-between px-0"><span>${k}</span><span>${v}</span></li>`
       )
       .join("");
-    const plotUrl = run.plots[state.plotKind];
-    const placeholderBadge = run.plots_are_placeholder
-      ? '<span class="badge text-bg-warning mb-2">plot ilustrativo</span>'
-      : "";
+    const plotUrl = run.plots?.[state.plotKind];
+    const plotEl = plotUrl
+      ? `<img src="${plotUrl}" alt="${state.plotKind}" class="img-fluid border rounded mb-3" data-plot-img>`
+      : `<div class="alert alert-warning mb-3" data-plot-img>Gráfico ainda sendo gerado — recarregue a página em alguns segundos.</div>`;
     panelEl(slot).innerHTML = `
       <h5>${run.name}</h5>
       <span class="badge text-bg-secondary mb-2">${run.algorithm}</span>
-      ${placeholderBadge}
-      <img src="${plotUrl}" alt="${state.plotKind}" class="img-fluid border rounded mb-3" data-plot-img>
+      ${plotEl}
       <h6>Hiperparâmetros</h6>
       <ul class="list-group list-group-flush mb-3">${hp || '<li class="list-group-item px-0 text-muted">nenhum</li>'}</ul>
       <h6>Métricas</h6>

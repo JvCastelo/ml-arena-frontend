@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 
 from app.auth_guard import require_token
@@ -35,6 +35,7 @@ async def new_run_submit(
     train_mae: float = Form(...),
     test_rmse: float = Form(...),
     test_mae: float = Form(...),
+    csv_file: UploadFile | None = File(None),
 ):
     token = require_token(request)
 
@@ -65,7 +66,7 @@ async def new_run_submit(
         },
     }
     try:
-        await api_client.create_run(token, payload)
+        created = await api_client.create_run(token, payload)
     except ApiError as exc:
         flash(request, exc.detail, "danger")
         return render(
@@ -82,6 +83,26 @@ async def new_run_submit(
         )
 
     flash(request, f'Run "{name}" criado.', "success")
+
+    if csv_file is not None and csv_file.filename:
+        content = await csv_file.read()
+        try:
+            await api_client.upload_measured_predicted(
+                token, created["id"], csv_file.filename, content, csv_file.content_type
+            )
+            flash(
+                request,
+                "CSV enviado — os plots ficam prontos em alguns segundos.",
+                "info",
+            )
+        except ApiError as exc:
+            # O run já foi criado; o CSV pode ser enviado depois editando o run.
+            flash(
+                request,
+                f"Run criado, mas o upload do CSV falhou: {exc.detail}",
+                "warning",
+            )
+
     return RedirectResponse(url=request.url_for("runs_list"), status_code=303)
 
 

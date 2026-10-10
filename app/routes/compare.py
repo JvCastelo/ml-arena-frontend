@@ -1,17 +1,13 @@
 from typing import Any
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.auth_guard import require_token
-from app.services import api_client, mock_plots
+from app.services import api_client
 from app.templates_engine import render
 
 router = APIRouter(prefix="/compare")
-
-# O backend ainda não gera plots de verdade (sem S3/worker ainda) — os
-# gráficos aqui são só ilustrativos, qualidade fixa, até existir plot real.
-PLACEHOLDER_QUALITY = 0.65
 
 
 @router.get("", name="compare_battle")
@@ -21,43 +17,15 @@ async def battle(request: Request):
     return render(request, "compare.html", {"runs": data["items"]})
 
 
-def _serialize(run: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": run["id"],
-        "name": run["name"],
-        "algorithm": run["algorithm"],
-        "hyperparams": run["hyperparams"],
-        "metrics": run["metrics"],
-        "plots": {
-            "measured_predicted": f"/compare/plot/{run['id']}/measured_predicted",
-            "residuals": f"/compare/plot/{run['id']}/residuals",
-        },
-        "plots_are_placeholder": True,
-    }
-
-
 @router.get("/data", name="compare_data")
 async def data(request: Request, a: int | None = None, b: int | None = None):
-    """Mimetiza o payload que `GET /api/v1/runs/compare?a=&b=` vai devolver
-    quando existir no backend — hoje monta com duas chamadas a `GET
-    /runs/{id}` (hiperparams/métricas reais; plots continuam mock)."""
+    """Proxy pra `GET /api/v1/runs/compare?run_a=&run_b=` — exige os dois ids
+    juntos (a rota do backend não aceita um só), então só chama quando o
+    usuário já escolheu os dois slots."""
     token = require_token(request)
-    result: dict[str, Any] = {}
-    for slot, run_id in (("a", a), ("b", b)):
-        if not run_id:
-            result[slot] = None
-            continue
-        run = await api_client.get_run(token, run_id)
-        result[slot] = _serialize(run)
+    if not a or not b:
+        return JSONResponse({"a": None, "b": None})
+
+    comparison = await api_client.compare_runs(token, a, b)
+    result: dict[str, Any] = {"a": comparison["run_a"], "b": comparison["run_b"]}
     return JSONResponse(result)
-
-
-@router.get("/plot/{run_id}/{kind}", name="compare_plot")
-async def plot(run_id: int, kind: str):
-    if kind == "measured_predicted":
-        svg = mock_plots.measured_predicted_svg(run_id, PLACEHOLDER_QUALITY)
-    elif kind == "residuals":
-        svg = mock_plots.residuals_svg(run_id, PLACEHOLDER_QUALITY)
-    else:
-        return Response(status_code=404)
-    return Response(content=svg, media_type="image/svg+xml")

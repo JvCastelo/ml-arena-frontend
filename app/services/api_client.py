@@ -120,3 +120,42 @@ async def delete_run(token: str, run_id: int) -> None:
             f"/api/v1/runs/{run_id}", headers=_auth_headers(token)
         )
     _raise_for_status(response)
+
+
+async def compare_runs(token: str, run_a: int, run_b: int) -> dict[str, Any]:
+    """`GET /api/v1/runs/compare?run_a=&run_b=` — os dois lados prontos pra
+    tela de batalha, plots incluídos (URL pré-assinada do S3, ou `null` se o
+    worker ainda não terminou)."""
+    async with httpx.AsyncClient(
+        base_url=settings.api_base_url, timeout=10.0
+    ) as client:
+        response = await client.get(
+            "/api/v1/runs/compare",
+            params={"run_a": run_a, "run_b": run_b},
+            headers=_auth_headers(token),
+        )
+    _raise_for_status(response)
+    return response.json()
+
+
+async def upload_measured_predicted(
+    token: str,
+    run_id: int,
+    filename: str,
+    content: bytes,
+    content_type: str | None,
+) -> dict[str, Any]:
+    """`POST /api/v1/runs/{run_id}/measured-predicted` — upload do CSV. Não
+    espera o worker: a resposta só confirma que o CSV chegou no S3 e o
+    processamento foi avisado via SNS/SQS (o run fica `processing` até os
+    plots ficarem prontos)."""
+    async with httpx.AsyncClient(
+        base_url=settings.api_base_url, timeout=30.0
+    ) as client:
+        response = await client.post(
+            f"/api/v1/runs/{run_id}/measured-predicted",
+            files={"file": (filename, content, content_type or "text/csv")},
+            headers=_auth_headers(token),
+        )
+    _raise_for_status(response)
+    return response.json()
