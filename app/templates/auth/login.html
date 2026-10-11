@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Entrar · ML Arena{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Entrar</h1>
+<form method="post" class="bg-white p-4 rounded shadow-sm" style="max-width: 420px;">
+  <div class="mb-3">
+    <label class="form-label">E-mail</label>
+    <input class="form-control" type="email" name="email" required value="{{ email or '' }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Senha</label>
+    <input class="form-control" type="password" name="password" required>
+  </div>
+  <button class="btn btn-primary" type="submit">Entrar</button>
+  <a class="btn btn-link" href="{{ url_for('register_form') }}">Criar conta</a>
+</form>
+{% endblock %}

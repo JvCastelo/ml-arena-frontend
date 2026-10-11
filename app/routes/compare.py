@@ -1,50 +1,31 @@
-from flask import Blueprint, Response, jsonify, render_template, request
+from typing import Any
 
-from ..services import mock_data, mock_plots
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
-compare_bp = Blueprint("compare", __name__, url_prefix="/compare")
+from app.auth_guard import require_token
+from app.services import api_client
+from app.templates_engine import render
 
-
-@compare_bp.get("")
-def battle():
-    return render_template("compare.html", runs=mock_data.list_runs())
-
-
-def _serialize(run):
-    return {
-        "id": run["id"],
-        "name": run["name"],
-        "algorithm": run["algorithm"],
-        "hyperparams": run["hyperparams"],
-        "metrics": run["metrics"],
-        "plots": {
-            "measured_predicted": f"/compare/plot/{run['id']}/measured_predicted",
-            "residuals": f"/compare/plot/{run['id']}/residuals",
-        },
-    }
+router = APIRouter(prefix="/compare")
 
 
-@compare_bp.get("/data")
-def data():
-    """Mimetiza o payload combinado que `GET /runs/compare?a=&b=` vai devolver
-    no backend real — hoje montado aqui a partir dos dados mock."""
-    result = {}
-    for slot in ("a", "b"):
-        run_id = request.args.get(slot, type=int)
-        run = mock_data.get_run(run_id) if run_id else None
-        result[slot] = _serialize(run) if run else None
-    return jsonify(result)
+@router.get("", name="compare_battle")
+async def battle(request: Request):
+    token = require_token(request)
+    data = await api_client.list_runs(token, limit=100)
+    return render(request, "compare.html", {"runs": data["items"]})
 
 
-@compare_bp.get("/plot/<int:run_id>/<kind>")
-def plot(run_id, kind):
-    run = mock_data.get_run(run_id)
-    if not run:
-        return "", 404
-    if kind == "measured_predicted":
-        svg = mock_plots.measured_predicted_svg(run_id, run["quality"])
-    elif kind == "residuals":
-        svg = mock_plots.residuals_svg(run_id, run["quality"])
-    else:
-        return "", 404
-    return Response(svg, mimetype="image/svg+xml")
+@router.get("/data", name="compare_data")
+async def data(request: Request, a: int | None = None, b: int | None = None):
+    """Proxy pra `GET /api/v1/runs/compare?run_a=&run_b=` — exige os dois ids
+    juntos (a rota do backend não aceita um só), então só chama quando o
+    usuário já escolheu os dois slots."""
+    token = require_token(request)
+    if not a or not b:
+        return JSONResponse({"a": None, "b": None})
+
+    comparison = await api_client.compare_runs(token, a, b)
+    result: dict[str, Any] = {"a": comparison["run_a"], "b": comparison["run_b"]}
+    return JSONResponse(result)

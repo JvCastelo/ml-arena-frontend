@@ -1,8 +1,14 @@
-// JS puro da tela de comparação. No backend real, este fetch iria pra uma rota
-// do próprio frontend que faz proxy pro `GET /runs/compare` do backend (usando
-// o JWT da sessão) — aqui, /compare/data já devolve dados mock no mesmo formato.
+// JS puro da tela de comparação. `/compare/data` é uma rota do próprio
+// frontend que faz proxy pro backend (usando o JWT da sessão, nunca exposto
+// aqui). `run.plots[kind]` vem `null` quando o worker ainda não terminou de
+// gerar aquele plot (run processing/failed) — tratado abaixo em vez de
+// quebrar a <img>.
 (function () {
   const state = { a: null, b: null, plotKind: "measured_predicted" };
+
+  function fmt(value) {
+    return typeof value === "number" ? value.toFixed(2) : "—";
+  }
 
   function panelEl(slot) {
     return document.getElementById(`panel-${slot}`);
@@ -19,19 +25,22 @@
           `<li class="list-group-item d-flex justify-content-between px-0"><span>${k}</span><span>${v}</span></li>`
       )
       .join("");
-    const plotUrl = run.plots[state.plotKind];
+    const plotUrl = run.plots?.[state.plotKind];
+    const plotEl = plotUrl
+      ? `<img src="${plotUrl}" alt="${state.plotKind}" class="img-fluid border rounded mb-3" data-plot-img>`
+      : `<div class="alert alert-warning mb-3" data-plot-img>Gráfico ainda sendo gerado — recarregue a página em alguns segundos.</div>`;
     panelEl(slot).innerHTML = `
       <h5>${run.name}</h5>
       <span class="badge text-bg-secondary mb-2">${run.algorithm}</span>
-      <img src="${plotUrl}" alt="${state.plotKind}" class="img-fluid border rounded mb-3" data-plot-img>
+      ${plotEl}
       <h6>Hiperparâmetros</h6>
       <ul class="list-group list-group-flush mb-3">${hp || '<li class="list-group-item px-0 text-muted">nenhum</li>'}</ul>
       <h6>Métricas</h6>
       <table class="table table-sm mb-0">
         <thead><tr><th></th><th>RMSE</th><th>MAE</th></tr></thead>
         <tbody>
-          <tr><td>treino</td><td>${run.metrics.train.rmse.toFixed(2)}</td><td>${run.metrics.train.mae.toFixed(2)}</td></tr>
-          <tr><td>teste</td><td>${run.metrics.test.rmse.toFixed(2)}</td><td>${run.metrics.test.mae.toFixed(2)}</td></tr>
+          <tr><td>treino</td><td>${fmt(run.metrics?.train?.rmse)}</td><td>${fmt(run.metrics?.train?.mae)}</td></tr>
+          <tr><td>teste</td><td>${fmt(run.metrics?.test?.rmse)}</td><td>${fmt(run.metrics?.test?.mae)}</td></tr>
         </tbody>
       </table>
     `;
@@ -68,19 +77,20 @@
       return;
     }
     const rows = [
-      ["RMSE treino", state.a.metrics.train.rmse, state.b.metrics.train.rmse],
-      ["MAE treino", state.a.metrics.train.mae, state.b.metrics.train.mae],
-      ["RMSE teste", state.a.metrics.test.rmse, state.b.metrics.test.rmse],
-      ["MAE teste", state.a.metrics.test.mae, state.b.metrics.test.mae],
+      ["RMSE treino", state.a.metrics?.train?.rmse, state.b.metrics?.train?.rmse],
+      ["MAE treino", state.a.metrics?.train?.mae, state.b.metrics?.train?.mae],
+      ["RMSE teste", state.a.metrics?.test?.rmse, state.b.metrics?.test?.rmse],
+      ["MAE teste", state.a.metrics?.test?.mae, state.b.metrics?.test?.mae],
     ];
     const body = rows
       .map(([label, va, vb]) => {
-        const aWorse = va > vb;
-        const bWorse = vb > va;
+        const bothNumbers = typeof va === "number" && typeof vb === "number";
+        const aWorse = bothNumbers && va > vb;
+        const bWorse = bothNumbers && vb > va;
         return `<tr>
           <td>${label}</td>
-          <td class="${aWorse ? "text-danger fw-semibold" : ""}">${va.toFixed(2)}</td>
-          <td class="${bWorse ? "text-danger fw-semibold" : ""}">${vb.toFixed(2)}</td>
+          <td class="${aWorse ? "text-danger fw-semibold" : ""}">${fmt(va)}</td>
+          <td class="${bWorse ? "text-danger fw-semibold" : ""}">${fmt(vb)}</td>
         </tr>`;
       })
       .join("");

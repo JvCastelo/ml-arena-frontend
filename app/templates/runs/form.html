@@ -2,7 +2,7 @@
 {% block title %}Nova run · ML Arena{% endblock %}
 {% block content %}
 <h1 class="h3 mb-3">Nova run</h1>
-<form method="post" class="bg-white p-4 rounded shadow-sm" style="max-width: 640px;">
+<form method="post" enctype="multipart/form-data" class="bg-white p-4 rounded shadow-sm" style="max-width: 640px;">
   <div class="mb-3">
     <label class="form-label">Nome</label>
     <input class="form-control" type="text" name="name" required value="{{ form.get('name', '') }}">
@@ -36,14 +36,15 @@
     </div>
   </div>
   <div class="mb-3">
-    <label class="form-label">CSV medido × previsto</label>
-    <input class="form-control" type="file" disabled>
+    <label class="form-label">CSV medido × previsto (opcional)</label>
+    <input class="form-control" type="file" name="csv_file" accept=".csv">
     <div class="form-text">
-      Upload desabilitado no protótipo — depende do contrato de
-      <code>POST /runs/{id}/actual-predicted</code> e do worker (SNS/SQS), que ainda não existem.
+      Precisa ter as colunas <code>measured</code> e <code>predicted</code>, até 5 MB. Os plots são
+      gerados de forma assíncrona depois do upload — pode levar alguns segundos pra aparecer na
+      tela de comparação.
     </div>
   </div>
-  <button class="btn btn-primary" type="submit">Criar run (mock)</button>
-  <a class="btn btn-link" href="{{ url_for('runs.list_runs') }}">Cancelar</a>
+  <button class="btn btn-primary" type="submit">Criar run</button>
+  <a class="btn btn-link" href="{{ url_for('runs_list') }}">Cancelar</a>
 </form>
 {% endblock %}

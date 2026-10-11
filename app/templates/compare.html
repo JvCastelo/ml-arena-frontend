@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Comparar · ML Arena{% endblock %}
 {% block content %}
-<h1 class="h3 mb-3">Model Battle</h1>
+<h1 class="h3 mb-1">Model Battle</h1>
+<p class="text-muted small mb-3">
+  Se um run acabou de receber o CSV, o plot pode ainda estar sendo gerado — recarregue a página em
+  alguns segundos.
+</p>
 
 <div class="row g-4">
   {% for slot in ["a", "b"] %}
@@ -45,5 +49,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/compare.js') }}"></script>
+<script src="{{ url_for('static', path='js/compare.js') }}"></script>
 {% endblock %}
