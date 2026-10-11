@@ -5,6 +5,7 @@
 // quebrar a <img>.
 (function () {
   const state = { a: null, b: null, plotKind: "measured_predicted" };
+  const selectedIds = { a: null, b: null };
 
   function fmt(value) {
     return typeof value === "number" ? value.toFixed(2) : "—";
@@ -15,7 +16,7 @@
   }
 
   function renderEmptyPanel(slot) {
-    panelEl(slot).innerHTML = '<p class="text-muted mb-0">Escolha um run acima.</p>';
+    panelEl(slot).innerHTML = '<p class="text-muted mb-0">Escolha os dois runs e clique em SUBMIT.</p>';
   }
 
   function renderPanel(slot, run) {
@@ -46,22 +47,43 @@
     `;
   }
 
-  async function loadSlot(slot, runId) {
-    if (!runId) {
-      state[slot] = null;
-      renderEmptyPanel(slot);
-      renderComparisonTable();
-      return;
-    }
-    const res = await fetch(`/compare/data?${slot}=${runId}`);
-    const payload = await res.json();
-    const run = payload[slot];
-    state[slot] = run || null;
-    if (run) {
-      renderPanel(slot, run);
+  function renderSlot(slot) {
+    if (state[slot]) {
+      renderPanel(slot, state[slot]);
     } else {
       renderEmptyPanel(slot);
     }
+  }
+
+  // Selecionar só marca qual run cada slot quer — não busca nada ainda.
+  // É o SUBMIT que dispara a busca e preenche plot + métricas juntos.
+  function onSelectChange(slot, runId) {
+    selectedIds[slot] = runId || null;
+  }
+
+  function onReset(slot) {
+    selectedIds[slot] = null;
+    state[slot] = null;
+    document.getElementById(`select-${slot}`).value = "";
+    renderSlot(slot);
+    renderComparisonTable();
+  }
+
+  async function submitCompare() {
+    const { a, b } = selectedIds;
+    if (!a || !b) {
+      document.getElementById("comparison-table").innerHTML =
+        '<p class="text-muted mb-0">Escolha os dois runs antes de clicar em SUBMIT.</p>';
+      return;
+    }
+
+    const res = await fetch(`/compare/data?a=${a}&b=${b}`);
+    const payload = await res.json();
+    state.a = payload.a || null;
+    state.b = payload.b || null;
+    renderSlot("a");
+    renderSlot("b");
+    renderComparisonTable();
   }
 
   function updatePlotImages() {
@@ -104,15 +126,13 @@
 
   document.querySelectorAll("select[data-slot]").forEach((select) => {
     select.addEventListener("change", (e) => {
-      loadSlot(e.target.dataset.slot, e.target.value);
+      onSelectChange(e.target.dataset.slot, e.target.value);
     });
   });
 
   document.querySelectorAll("[data-reset]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      const slot = e.target.dataset.reset;
-      document.getElementById(`select-${slot}`).value = "";
-      loadSlot(slot, null);
+      onReset(e.target.dataset.reset);
     });
   });
 
@@ -125,5 +145,5 @@
     });
   });
 
-  document.getElementById("submit-compare").addEventListener("click", renderComparisonTable);
+  document.getElementById("submit-compare").addEventListener("click", submitCompare);
 })();

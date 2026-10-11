@@ -34,6 +34,11 @@
       <td>{{ "%.2f"|format(test_rmse) if test_rmse is not none else "—" }}</td>
       <td>{{ run.created_at[:16].replace("T", " ") }}</td>
       <td class="text-end">
+        {% if run.status in ("created", "failed") %}
+        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('upload_csv_form', run_id=run.id) }}">
+          Upload CSV
+        </a>
+        {% endif %}
         <form class="d-inline" method="post" action="{{ url_for('delete_run', run_id=run.id) }}"
               onsubmit="return confirm('Remover este run?');">
           <button class="btn btn-sm btn-outline-danger" type="submit">Remover</button>

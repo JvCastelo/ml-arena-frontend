@@ -1,7 +1,7 @@
 [project]
 name = "ml-arena-frontend"
 version = "0.1.0"
-description = "Frontend (protótipo) do ML Arena"
+description = "ML Arena: interface web para registro e comparação de runs de modelos de ML"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

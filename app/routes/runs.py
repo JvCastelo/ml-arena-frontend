@@ -106,6 +106,33 @@ async def new_run_submit(
     return RedirectResponse(url=request.url_for("runs_list"), status_code=303)
 
 
+@router.get("/{run_id}/upload", name="upload_csv_form")
+async def upload_csv_form(request: Request, run_id: int):
+    token = require_token(request)
+    run = await api_client.get_run(token, run_id)
+    return render(request, "runs/upload.html", {"run": run})
+
+
+@router.post("/{run_id}/upload", name="upload_csv_submit")
+async def upload_csv_submit(
+    request: Request, run_id: int, csv_file: UploadFile = File(...)
+):
+    token = require_token(request)
+    content = await csv_file.read()
+    try:
+        await api_client.upload_measured_predicted(
+            token, run_id, csv_file.filename, content, csv_file.content_type
+        )
+        flash(
+            request,
+            "CSV enviado — os plots ficam prontos em alguns segundos.",
+            "success",
+        )
+    except ApiError as exc:
+        flash(request, f"Upload falhou: {exc.detail}", "danger")
+    return RedirectResponse(url=request.url_for("runs_list"), status_code=303)
+
+
 @router.post("/{run_id}/delete", name="delete_run")
 async def delete_run(request: Request, run_id: int):
     token = require_token(request)

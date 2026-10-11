@@ -1,37 +1,94 @@
-# ml-arena-frontend
+# ML Arena — Frontend
 
-FastAPI + Jinja2 + Bootstrap (CDN) + JS puro só na tela de comparação — conectado de verdade com
-o `ml-arena-backend`: auth, CRUD de runs, upload de CSV e comparação com os plots reais (S3 via
-URL pré-assinada). Ver `docs/frontend-notes.md` pra decisões/contexto, e o `CLAUDE.md` deste repo
-pra como a integração final foi feita.
+Interface web do **ML Arena**, uma ferramenta para registrar execuções ("runs") de modelos de
+Machine Learning, acompanhar métricas e hiperparâmetros, e comparar dois runs lado a lado
+(incluindo os gráficos de medido×previsto e resíduos gerados a partir do CSV enviado).
 
-## Rodar localmente
+Projeto desenvolvido para a disciplina **Desenvolvimento de Software para Nuvem** (UFC).
 
-Precisa do backend rodando (`docker compose up -d` no `ml-arena-backend` — sobe API, worker, db e
-redis; precisa de credenciais AWS válidas no `.env` dele pra S3/SNS/SQS/DynamoDB funcionarem).
+## Arquitetura: por que dois repositórios
+
+A aplicação é dividida em dois serviços independentes:
+
+- **`ml-arena-backend`**: a API (FastAPI). Guarda os dados em PostgreSQL (RDS), armazena CSVs e
+  gráficos no S3, processa o CSV de forma assíncrona num worker separado (SNS/SQS), autentica
+  usuários via JWT, audita ações no DynamoDB e usa Redis/ElastiCache como cache. É ele quem fala
+  com toda a infraestrutura AWS.
+- **`ml-arena-frontend`** (este repositório): só a interface — renderiza as telas e repassa as
+  ações do usuário pra API do backend. Não guarda dados, não fala com RDS/S3/DynamoDB/SQS
+  diretamente, e não precisa de nenhuma credencial AWS pra funcionar.
+
+Essa separação permite que cada serviço escale e seja implantado de forma independente.
+
+### Como os dois se comunicam
+
+O frontend é um cliente HTTP da API: todas as chamadas (login, listar/criar/remover runs, upload
+de CSV, comparação) são feitas pelo próprio servidor do frontend usando `httpx`, nunca pelo
+JavaScript do navegador. Isso importa por dois motivos:
+
+1. **Segurança**: o token JWT devolvido pela API no login fica guardado só na sessão do servidor
+   (um cookie assinado, graças ao `SessionMiddleware` do Starlette) — o navegador nunca tem acesso
+   direto a ele via JavaScript.
+2. **Simplicidade**: como o navegador nunca chama a API diretamente, não é preciso configurar CORS
+   no backend.
+
+## Stack
+
+- **FastAPI** + **Jinja2** para renderizar o HTML no servidor.
+- **Bootstrap** via CDN para o layout — sem build step, sem `npm`/`webpack`.
+- **JavaScript puro**, usado só na tela de comparação (`app/static/js/compare.js`), pra buscar os
+  dados dos dois runs escolhidos e montar a tabela/plots sem recarregar a página.
+- **httpx** como cliente HTTP assíncrono para falar com a API.
+- **uv** para gerenciar dependências Python.
+
+## Telas
+
+| Rota | O que faz |
+|---|---|
+| `/register`, `/login`, `/logout` | Cadastro e autenticação. O token da API fica na sessão. |
+| `/runs` | Lista os runs do usuário logado, com status (`created`/`processing`/`done`/`failed`). |
+| `/runs/new` | Cria um run (algoritmo, hiperparâmetros, métricas) e, opcionalmente, já envia o CSV medido×previsto. |
+| `/runs/{id}/upload` | Envia o CSV depois, para um run que já existe mas ainda não tem um. |
+| `/compare` | Tela de comparação ("Model Battle"): escolhe dois runs, clica em **SUBMIT** e vê hiperparâmetros, métricas e os dois gráficos lado a lado. |
+
+O upload de CSV dispara o processamento assíncrono no backend — o run fica `processing` até o
+worker terminar de gerar os gráficos, e passa a `done` (ou `failed`, se o CSV não puder ser
+processado). Enquanto um gráfico ainda não existe, a tela de comparação avisa em vez de mostrar
+uma imagem quebrada.
+
+## Configuração (`.env`)
 
 ```bash
-cp .env.example .env     # ajuste API_BASE_URL se o backend não estiver em :8000
+cp .env.example .env
+```
+
+| Variável | O que é |
+|---|---|
+| `API_BASE_URL` | Endereço da API do backend (ex.: `http://127.0.0.1:8000` local, ou o DNS do Load Balancer do backend em produção — nunca o IP de uma instância específica). |
+| `SECRET_KEY` | Chave usada só para assinar o cookie de sessão deste frontend (via `itsdangerous`). **Não é** a mesma chave que o backend usa para assinar o JWT — são segredos independentes, com finalidades diferentes. Em produção precisa ser um valor aleatório de verdade, gerado com `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`. |
+
+## Como rodar
+
+### Com `uv` (desenvolvimento)
+
+```bash
 uv sync
 uv run fastapi dev app/main.py --port 8001
 ```
 
-Abre http://127.0.0.1:8001. Crie uma conta em `/register`, faça login, e use `/runs` e `/compare`.
+### Com Docker
 
-Em produção, `API_BASE_URL` deve apontar pro DNS do Load Balancer do backend (não pro IP de uma
-instância — o backend escala de 1 a 3 instâncias atrás do ALB).
+```bash
+docker build -t ml-arena-frontend .
+docker run -d --name frontend --env-file .env -p 8001:8001 --restart unless-stopped ml-arena-frontend
+```
 
-## O que tem
+Em ambos os casos, a aplicação precisa do backend já rodando e acessível no endereço configurado
+em `API_BASE_URL`. Depois de subir, acesse `http://localhost:8001` (ou o endereço da instância,
+em produção).
 
-- `/register`, `/login`, `/logout` — reais, contra `POST /api/v1/users/` e `POST /api/v1/auth/login`
-  do backend. Token JWT guardado na sessão (cookie assinado), nunca exposto ao JS do browser.
-- `/runs` — lista (com status: `created`/`processing`/`done`/`failed`), cria e remove runs de
-  verdade. Criar um run aceita opcionalmente o CSV medido×previsto — sobe pro S3, dispara o
-  worker (SNS/SQS) e o run fica `processing` até os plots ficarem prontos.
-- `/compare` — tela "Model Battle": hiperparâmetros, métricas e plots vêm de
-  `GET /api/v1/runs/compare?run_a=&run_b=`, uma chamada só. Se o worker ainda não terminou de
-  gerar algum plot, a API devolve `null` naquela chave e a UI avisa em vez de quebrar a imagem —
-  recarregar a página depois resolve. É a única tela com JS próprio (`app/static/js/compare.js`).
+## Deploy
 
-Testado de ponta a ponta contra o backend local, incluindo upload de CSV real processado pelo
-worker (gerando os PNGs de verdade no S3).
+O frontend roda numa única instância EC2, sem Auto Scaling — diferente da API, ele não lida com
+carga variável que justifique escalar automaticamente. Não precisa de nenhuma IAM role: como não
+faz nenhuma chamada à AWS, só precisa de rede liberada para falar HTTP com o Load Balancer da API.
