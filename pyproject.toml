@@ -1,0 +1,21 @@
+[project]
+name = "ml-arena-frontend"
+version = "0.1.0"
+description = "ML Arena: interface web para registro e comparação de runs de modelos de ML"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.141.1",
+    "pydantic-settings>=2.6",
+    "itsdangerous>=2.2.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.8",
+]
+
+[tool.ruff.lint]
+ignore = [
+    "B008", # Permite chamadas de função nos argumentos (Necessário para o FastAPI: Depends, File, Form)
+]
